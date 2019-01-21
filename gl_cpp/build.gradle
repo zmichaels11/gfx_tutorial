@@ -1,0 +1,46 @@
+apply plugin: 'cpp'
+
+model {
+    toolChains {
+        gcc (Gcc) {
+            eachPlatform {
+                cppCompiler.withArguments { args -> 
+                    args << '-std=c++14'
+                    args << '-O2'
+                    args << '-Wall'
+                    args << '-g'
+                }
+
+                linker.withArguments { args -> 
+                    args << '-m64'
+                    args << '-lGL'
+                    args << '-lglfw'
+                }
+            }
+        }
+    }
+
+    components {
+        tutorial00 (NativeExecutableSpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/tutorial00/cpp'
+                        include '**/*.cpp'
+                    }
+                }
+            }
+        }
+        
+        tutorial01 (NativeExecutableSpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/tutorial01/cpp'
+                        include '**/*.cpp'
+                    }
+                }
+            }
+        }
+    }
+}
