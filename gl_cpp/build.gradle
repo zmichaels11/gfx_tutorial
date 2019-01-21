@@ -15,6 +15,7 @@ model {
                     args << '-m64'
                     args << '-lGL'
                     args << '-lglfw'
+                    args << '-lGLEW'
                 }
             }
         }
@@ -31,12 +32,23 @@ model {
                 }
             }
         }
-        
+
         tutorial01 (NativeExecutableSpec) {
             sources {
                 cpp {
                     source {
                         srcDir 'src/tutorial01/cpp'
+                        include '**/*.cpp'
+                    }
+                }
+            }
+        }
+
+        tutorial02 (NativeExecutableSpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/tutorial02/cpp'
                         include '**/*.cpp'
                     }
                 }
