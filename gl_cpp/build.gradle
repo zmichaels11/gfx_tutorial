@@ -153,5 +153,16 @@ model {
                 }
             }
         }
+
+        tutorial11 (NativeExecutableSpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/tutorial11/cpp'
+                        include '**/*.cpp'
+                    }
+                }
+            }
+        }
     }
 }
