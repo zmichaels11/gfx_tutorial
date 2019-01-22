@@ -1,8 +1,8 @@
 /**
- * Tutorial04 - Shaders
+ * Tutorial04a - Shaders (OpenGL 4.5)
  * 
  * Draws a Triangle in the center of the screen using shaders.
- * Uses OpenGL 2.0
+ * Uses OpenGL 4.5
  */
 
 #include <GL/glew.h>
@@ -24,19 +24,19 @@ namespace {
     }
 
     const std::string VERTEX_SHADER = 
-        "#version 110\n"
-        
-        "attribute vec3 position;\n"
+        "#version 450\n"        
+        "layout (location = 0) in vec3 position;\n"
 
         "void main() {\n"
         "  gl_Position = vec4(position, 1.0);\n"
         "}";
 
     const std::string FRAGMENT_SHADER =
-        "#version 110\n"
+        "#version 450\n"
+        "layout (location = 0) out vec4 color;\n"
 
         "void main() {\n"
-        "  gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
+        "  color = vec4(1.0, 0.0, 0.0, 1.0);\n"
         "}";
 
     constexpr GLsizei MAX_INFO_LOG_LENGTH = 1024;
@@ -95,6 +95,16 @@ namespace {
         }
 
         return program;
+    }    
+
+    void GLAPIENTRY debugCallback(GLenum source, GLenum type, GLenum id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) {
+        if (GL_DEBUG_TYPE_ERROR == type) {
+            std::cerr << "[ERROR]: ";
+        } else {
+            std::cerr << "[DEBUG]: ";
+        }
+
+        std::cerr << message << std::endl;
     }
 }
 
@@ -106,17 +116,17 @@ int main(int argc, char** argv) {
     }
 
     glfwDefaultWindowHints();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 
-    auto window = glfwCreateWindow(640, 480, "Tutorial04", nullptr, nullptr);
+    auto window = glfwCreateWindow(640, 480, "Tutorial04a", nullptr, nullptr);
 
     if (nullptr == window) {
         throw std::runtime_error("Failed to create GLFW window!");
     }
 
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(1);    
 
     GLenum glErr = glewInit();
     if (glErr) {
@@ -126,6 +136,9 @@ int main(int argc, char** argv) {
 
         throw std::runtime_error(msg.str());
     }
+
+    glEnable(GL_DEBUG_OUTPUT);
+    glDebugMessageCallback(debugCallback, nullptr);
 
     GLuint program;
     {
@@ -143,26 +156,31 @@ int main(int argc, char** argv) {
         glm::vec3(0.0F, 1.0F, 0.0F)});
 
     GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(points), points.data(), GL_STATIC_DRAW);
+    glCreateBuffers(1, &vbo);
+    glNamedBufferData(vbo, sizeof(points), points.data(), GL_STATIC_DRAW);
+
+    GLuint vao;
+    glCreateVertexArrays(1, &vao);
+    glEnableVertexArrayAttrib(vao, 0);
+    glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(vao, 0, 0);
+    
 
     glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
-    glPointSize(4.0F);
 
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT);
         
         glUseProgram(program);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBindVertexArray(vao);
+        glBindVertexBuffer(0, vbo, 0, sizeof(glm::vec3));
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
         glfwSwapBuffers(window);        
         glfwPollEvents();
     }
     
+    glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &vbo);
     glDeleteProgram(program);
 

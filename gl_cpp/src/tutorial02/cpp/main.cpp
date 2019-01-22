@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
-    auto window = glfwCreateWindow(640, 480, "Tutorial01", nullptr, nullptr);
+    auto window = glfwCreateWindow(640, 480, "Tutorial02", nullptr, nullptr);
 
     if (nullptr == window) {
         throw std::runtime_error("Failed to create GLFW window!");
