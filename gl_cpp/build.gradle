@@ -120,5 +120,16 @@ model {
                 }
             }
         }
+
+        tutorial08 (NativeExecutableSpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/tutorial08/cpp'
+                        include '**/*.cpp'
+                    }
+                }
+            }
+        }
     }
 }
