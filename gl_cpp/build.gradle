@@ -175,5 +175,21 @@ model {
                 }
             }
         }
+
+        tutorial13 (NativeExecutableSpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/tutorial13/cpp'
+                        include '**/*.cpp'
+                    }
+
+                    exportedHeaders {
+                        srcDir 'src/tutorial13/include'
+                        include '**/*.hpp'
+                    }
+                }
+            }
+        }
     }
 }
