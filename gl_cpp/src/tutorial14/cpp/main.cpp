@@ -21,6 +21,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "camera.hpp"
+
 namespace {
     void errorCallback(int error, const char * desc) {
         std::cerr << "GLFW Error(" << std::dec << error << "): " << desc << std::endl;
@@ -113,7 +115,7 @@ namespace {
         }
 
         std::cerr << message << std::endl;
-    }
+    }    
 }
 
 int main(int argc, char** argv) {
@@ -127,7 +129,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 
-    auto window = glfwCreateWindow(640, 480, "Tutorial12", nullptr, nullptr);
+    auto window = glfwCreateWindow(640, 480, "Tutorial14", nullptr, nullptr);
 
     if (nullptr == window) {
         throw std::runtime_error("Failed to create GLFW window!");
@@ -192,11 +194,23 @@ int main(int argc, char** argv) {
 
     glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
 
+    auto camera = gfx::Camera(640, 480);
+
+    glfwSetWindowUserPointer(window, &camera);
+    glfwSetKeyCallback(window, [](auto pWindow, auto key, auto scancode, auto action, auto mods) {
+        auto pCamera = reinterpret_cast<gfx::Camera * > (glfwGetWindowUserPointer(pWindow));
+
+        pCamera->onKeyboard(key, action);
+    });
+
     while (!glfwWindowShouldClose(window)) {
         auto trTrans = glm::translate(glm::mat4(1.0F), glm::vec3(0.0F, 0.0F, -5.0F));
         auto trRotate = glm::rotate(glm::mat4(1.0F), t, glm::vec3(0.0F, 1.0F, 0.0F));        
         auto trProj = glm::perspective(glm::radians(90.0F), 4.0F / 3.0F, 1.0F, 100.0F);
-        auto trMvp = trProj * trTrans * trRotate;
+        auto trModel = trTrans * trRotate;
+        auto trView = camera.getViewMatrix();
+        
+        auto trMvp = trProj * trView * trModel;        
         
         glClear(GL_COLOR_BUFFER_BIT);
         
@@ -210,6 +224,8 @@ int main(int argc, char** argv) {
 
         glfwSwapBuffers(window);        
         glfwPollEvents();
+
+        camera.update(0.1F);
 
         t += 0.01F;
     }
