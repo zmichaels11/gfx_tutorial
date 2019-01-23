@@ -40,11 +40,6 @@ namespace {
         "  mat4 mvp;\n"
         "} uCamera;\n"
 
-        "layout (binding = 1) uniform SunData {\n"
-        "  vec4 color;\n"
-        "  float ambientIntensity;\n"
-        "} uSun;\n"
-
         "void main() {\n"
         "  gl_Position = uCamera.mvp * vec4(position, 1.0);\n"        
         "  vTexCoord = texcoord;\n"

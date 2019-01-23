@@ -43,13 +43,6 @@ namespace {
         "  mat4 world;\n"
         "} uCamera;\n"
 
-        "layout (binding = 1, std140) uniform SunData {\n"
-        "  vec4 color;\n"
-        "  vec4 direction;\n"
-        "  float ambientIntensity;\n"
-        "  float diffuseIntensity;\n"
-        "} uSun;\n"
-
         "void main() {\n"
         "  gl_Position = uCamera.mvp * vec4(position, 1.0);\n"        
         "  vTexCoord = texcoord;\n"

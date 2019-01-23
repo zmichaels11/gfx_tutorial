@@ -31,80 +31,175 @@ namespace {
     }
 
     const std::string VERTEX_SHADER = 
-        "#version 450\n"        
+        "#version 450\n\n"
+
         "layout (location = 0) in vec3 position;\n"
         "layout (location = 1) in vec2 texcoord;\n"
         "layout (location = 2) in vec3 normal;\n"        
         "layout (location = 0) out vec2 vTexCoord;\n"
         "layout (location = 1) out vec3 vNormal;\n"
-        "layout (location = 2) out vec3 vWorldPos;\n"
+        "layout (location = 2) out vec3 vWorldPos;\n\n"
 
         "layout (binding = 0, std140) uniform CameraData {\n"
         "  mat4 mvp;\n"
         "  mat4 normal;\n"
         "  mat4 world;\n"
         "  vec4 eye;\n"
-        "} uCamera;\n"
+        "  int numPointLights;\n"
+        "  int numSpotLights;\n"
+        "} uCamera;\n\n"
 
         "void main() {\n"
         "  gl_Position = uCamera.mvp * vec4(position, 1.0);\n"        
         "  vTexCoord = texcoord;\n"
         "  vNormal = mat3(uCamera.normal) * normal;\n"
         "  vWorldPos = (uCamera.world * vec4(position, 1.0)).xyz;\n"
-        "}";
+        "}\n";
 
     const std::string FRAGMENT_SHADER =
-        "#version 450\n"
+        "#version 450\n\n"
+
+        "const int MAX_POINT_LIGHTS = 8;\n"
+        "const int MAX_SPOT_LIGHTS = 8;\n\n"
+
         "layout (location = 0) in vec2 vTexCoord;\n"
         "layout (location = 1) in vec3 vNormal;\n"
         "layout (location = 2) in vec3 vWorldPos;\n"
-        "layout (location = 0) out vec4 fColor;\n"
+        "layout (location = 0) out vec4 fColor;\n\n"
 
-        "uniform sampler2D uImage;\n"
+        "uniform sampler2D uImage;\n\n"
 
         "layout (binding = 0, std140) uniform CameraData {\n"
         "  mat4 mvp;\n"
         "  mat4 normal;\n"
         "  mat4 world;\n"
         "  vec4 eye;\n"
-        "} uCamera;\n"
+        "  int numPointLights;\n"
+        "  int numSpotLights;\n"
+        "} uCamera;\n\n"
 
-        "layout (binding = 1, std140) uniform MaterialData {\n"
+        "layout (binding = 1, std140) uniform Material {\n"
         "  float specularIntensity;\n"
         "  float specularPower;\n"
-        "} uMaterial;\n"
+        "} uMaterial;\n\n"
 
         "layout (binding = 2, std140) uniform DirectionalLight {\n"        
         "  vec4 color;\n"
         "  vec4 direction;\n"
         "  float ambientIntensity;\n"        
-        "  float diffuseIntensity;\n"     
-        "} uSun;\n"
+        "  float diffuseIntensity;\n"             
+        "} uSun;\n\n"
 
-        "void main() {\n"
-        "  vec4 ambientColor = vec4(uSun.color.rgb * uSun.ambientIntensity, 1.0);\n"
-        "  vec3 lightDirection = -uSun.direction.xyz;\n"
-        "  vec3 normal = normalize(vNormal);\n"    
-        "  float diffuseFactor = dot(normal, lightDirection);\n"
-        "  vec4 diffuseColor = vec4(0.0);\n"
-        "  vec4 specularColor = vec4(0.0);\n"
+        "struct PointLight {\n"
+        "  vec4 color;\n"
+        "  vec4 position;\n"
+        "  float ambientIntensity;\n"
+        "  float diffuseIntensity;\n"
+        "  float attenuationConstant;\n"
+        "  float attenuationLinear;\n"
+        "  float attenuationExponential;\n"
+        "};\n\n"
 
+        "layout (binding = 3, std140) uniform PointLights {\n"
+        "  PointLight light[MAX_POINT_LIGHTS];\n"        
+        "} uPointLights;\n\n"
+
+        "struct SpotLight {\n"
+        "  vec4 color;\n"
+        "  vec4 position;\n"
+        "  vec4 direction;\n"
+        "  float ambientIntensity;\n"
+        "  float diffuseIntensity;\n"
+        "  float attenuationConstant;\n"
+        "  float attenuationLinear;\n"
+        "  float attenuationExponential;\n"
+        "  float cutoff;\n"
+        "};\n\n"
+
+        "layout (binding = 4, std140) uniform SpotLights {\n"
+        "  SpotLight light[MAX_SPOT_LIGHTS];\n"
+        "} uSpotLights;\n\n"
+
+        "vec3 calcLight(in vec3 color, in float ambientIntensity, in float diffuseIntensity, in vec3 direction, in vec3 normal) {\n"
+        "  vec3 ambientColor = color * ambientIntensity;\n"
+        "  float diffuseFactor = dot(normal, -direction);\n"
+        "  vec3 diffuseColor = vec3(0.0);\n"
+        "  vec3 specularColor = vec3(0.0);\n\n"
+        
         "  if (diffuseFactor > 0.0) {\n"
-        "    diffuseColor = vec4(uSun.color.rgb * uSun.diffuseIntensity * diffuseFactor, 1.0);\n"
-
+        "    diffuseColor = color * diffuseIntensity * diffuseFactor;\n\n"
+        
         "    vec3 vertexToEye = normalize(uCamera.eye.xyz - vWorldPos);\n"
-        "    vec3 lightReflect = normalize(reflect(uSun.direction.xyz, normal));\n"
-        "    float specularFactor = dot(vertexToEye, lightReflect);\n"
-
+        "    vec3 lightReflect = normalize(reflect(direction, normal));\n"
+        "    float specularFactor = dot(vertexToEye, lightReflect);\n\n"
+        
         "    if (specularFactor > 0.0) {\n"
         "      specularFactor = pow(specularFactor, uMaterial.specularPower);\n"
-        "      specularColor = vec4(uSun.color.rgb * uMaterial.specularIntensity * specularFactor, 1.0);\n"
-        "    }\n"
+        "      specularColor = color * uMaterial.specularIntensity * specularFactor;\n"
+        "    }\n"        
+        "  }\n\n"
+
+        "  return ambientColor + diffuseColor + specularColor;\n"
+        "}\n\n"
+
+        "vec3 calcDirectionalLight(in vec3 normal) {\n"
+        "  return calcLight(uSun.color.rgb, uSun.ambientIntensity, uSun.diffuseIntensity, uSun.direction.xyz, normal);\n"
+        "}\n\n"
+
+        "vec3 calcPointLight(\n"
+        "    in vec3 color, in vec3 position, \n"
+        "    in float ambientIntensity, in float diffuseIntensity, \n"
+        "    in float attenuationConstant, in float attenuationLinear, in float attenuationExponential, \n"
+        "    in vec3 normal) {\n\n"
+
+        "  vec3 lightDirection = vWorldPos - position;\n"
+        "  float distance = length(lightDirection);\n\n"
+
+        "  lightDirection = normalize(lightDirection);\n\n"
+
+        "  vec3 result = calcLight(color, ambientIntensity, diffuseIntensity, lightDirection, normal);\n"
+        "  float attenuation = attenuationConstant + attenuationLinear * distance + attenuationExponential * distance * distance;\n\n"
+
+        "  return result / attenuation;\n"
+        "}\n\n"
+
+        "vec3 calcSpotLight(\n"
+        "    in vec3 color, in vec3 position, in vec3 direction,\n"        
+        "    in float ambientIntensity, in float diffuseIntensity, \n"
+        "    in float attenuationConstant, in float attenuationLinear, in float attenuationExponential,\n"
+        "    in float cutoff, \n"
+        "    in vec3 normal) {\n\n"
+        
+        "  vec3 lightToPixel = normalize(vWorldPos - position);\n"
+        "  float spotFactor = dot(lightToPixel, direction);\n"
+
+        "  if (spotFactor > cutoff) {\n"
+        "    vec3 result = calcPointLight(color, position, ambientIntensity, diffuseIntensity, attenuationConstant, attenuationLinear, attenuationExponential, normal);\n"
+        
+        "    return result * (1.0 - (1.0 - spotFactor) * 1.0 / (1.0 - cutoff));\n"
         "  } else {\n"
-        "    diffuseColor = vec4(0.0);\n"
+        "    return vec3(0.0);\n"
         "  }\n"
-        "  fColor = texture(uImage, vTexCoord) * (ambientColor + diffuseColor + specularColor);\n"        
-        "}";
+        "}\n\n"
+
+        "void main() {\n"        
+        "  vec3 normal = normalize(vNormal);\n"    
+        "  vec3 totalLight = calcDirectionalLight(normal);\n\n"
+
+        "  for (int i = 0; i < uCamera.numPointLights; i++) {\n"
+        "    PointLight light = uPointLights.light[i];\n"
+
+        "    totalLight += calcPointLight(light.color.rgb, light.position.xyz, light.ambientIntensity, light.diffuseIntensity, light.attenuationConstant, light.attenuationLinear, light.attenuationExponential, normal);\n"
+        "  }\n\n"
+
+        "  for (int i = 0; i < uCamera.numSpotLights; i++) {\n"
+        "    SpotLight light = uSpotLights.light[i];\n"
+
+        "    totalLight += calcSpotLight(light.color.rgb, light.position.xyz, light.direction.xyz, light.ambientIntensity, light.diffuseIntensity, light.attenuationConstant, light.attenuationLinear, light.attenuationExponential, light.cutoff, normal);\n"
+        "  }\n\n"
+
+        "  fColor = texture(uImage, vTexCoord) * vec4(totalLight, 1.0);\n"
+        "}\n";
 
     constexpr GLsizei MAX_INFO_LOG_LENGTH = 1024;
 
@@ -186,7 +281,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 
-    auto window = glfwCreateWindow(640, 480, "Tutorial19", nullptr, nullptr);
+    auto window = glfwCreateWindow(640, 480, "Tutorial20", nullptr, nullptr);
 
     if (nullptr == window) {
         throw std::runtime_error("Failed to create GLFW window!");
@@ -271,6 +366,8 @@ int main(int argc, char** argv) {
         glm::mat4 normal;
         glm::mat4 world;
         glm::vec4 eye;
+        glm::int32 numPointLights;
+        glm::int32 numSpotLights;
     }; 
 
     struct UBOMaterialT {
@@ -285,13 +382,55 @@ int main(int argc, char** argv) {
         glm::float32 diffuseIntensity;        
     };
 
+    struct alignas(sizeof(glm::vec4)) PointLightT {
+        glm::vec4 color;
+        glm::vec4 position;
+        glm::float32 ambientIntensity;
+        glm::float32 diffuseIntensity;
+        glm::float32 attenuationConstant;
+        glm::float32 attenuationLinear;
+        glm::float32 attenuationExponential;
+    };
+
+    const GLsizei MAX_POINT_LIGHTS = 8;
+
+    struct UBOPointLightsT {
+        PointLightT lights[MAX_POINT_LIGHTS];
+    };
+
+    struct alignas(sizeof(glm::vec4)) SpotLightT {
+        glm::vec4 color;
+        glm::vec4 position;
+        glm::vec4 direction;
+        glm::float32 ambientIntensity;
+        glm::float32 diffuseIntensity;
+        glm::float32 attenuationConstant;
+        glm::float32 attenuationLinear;
+        glm::float32 attenuationExponential;
+        glm::float32 cutoff;
+    };
+
+    const GLsizei MAX_SPOT_LIGHTS = 8;
+
+    struct UBOSpotLightsT {
+        SpotLightT lights[MAX_SPOT_LIGHTS];
+    };
+
     GLint uboAlignment;
     glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &uboAlignment);
 
     auto alignedSizeofUBOCameraT = gfx::util::alignUp(sizeof(UBOCameraT), uboAlignment);
     auto alignedSizeofUBOMaterialT = gfx::util::alignUp(sizeof(UBOMaterialT), uboAlignment);
     auto alignedSizeofUBOSunT = gfx::util::alignUp(sizeof(UBOSunT), uboAlignment);
-    auto totalSizeofUBO = alignedSizeofUBOCameraT + alignedSizeofUBOSunT + alignedSizeofUBOMaterialT;
+    auto alignedSizeofUBOPointLightsT = gfx::util::alignUp(sizeof(UBOPointLightsT), uboAlignment);
+    auto alignedSizeofUBOSpotLightsT = gfx::util::alignUp(sizeof(UBOSpotLightsT), uboAlignment);
+    auto totalSizeofUBO = alignedSizeofUBOCameraT + alignedSizeofUBOSunT + alignedSizeofUBOMaterialT + alignedSizeofUBOPointLightsT + alignedSizeofUBOSpotLightsT;
+
+    auto alignedOffsetofUBOCamera = static_cast<GLintptr> (0);
+    auto alignedOffsetofUBOMaterial = alignedOffsetofUBOCamera + alignedSizeofUBOCameraT;
+    auto alignedOffsetofUBOSun = alignedOffsetofUBOMaterial + alignedSizeofUBOMaterialT;
+    auto alignedOffsetofUBOPointLights = alignedOffsetofUBOSun + alignedSizeofUBOSunT;
+    auto alignedOffsetofUBOSpotLights = alignedOffsetofUBOPointLights + alignedSizeofUBOPointLightsT;
 
     GLuint ubo;
     glCreateBuffers(1, &ubo);
@@ -300,12 +439,16 @@ int main(int argc, char** argv) {
     UBOCameraT * pCameraData;
     UBOMaterialT * pMaterialData;
     UBOSunT * pSunData;
+    UBOPointLightsT * pPointLightsData;
+    UBOSpotLightsT * pSpotLightsData;
     {
         auto pBase = reinterpret_cast<GLchar * > (glMapNamedBufferRange(ubo, 0, totalSizeofUBO, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));        
 
-        pCameraData = reinterpret_cast<UBOCameraT *> (pBase);
-        pMaterialData = reinterpret_cast<UBOMaterialT *> (pBase + alignedSizeofUBOCameraT);
-        pSunData = reinterpret_cast<UBOSunT *> (pBase + alignedSizeofUBOCameraT + alignedSizeofUBOMaterialT);
+        pCameraData = reinterpret_cast<UBOCameraT *> (pBase + alignedOffsetofUBOCamera);
+        pMaterialData = reinterpret_cast<UBOMaterialT *> (pBase + alignedOffsetofUBOMaterial);
+        pSunData = reinterpret_cast<UBOSunT *> (pBase + alignedOffsetofUBOSun);
+        pPointLightsData = reinterpret_cast<UBOPointLightsT *> (pBase + alignedOffsetofUBOPointLights);
+        pSpotLightsData = reinterpret_cast<UBOSpotLightsT *> (pBase + alignedOffsetofUBOSpotLights);
     }
     
     GLuint vao;
@@ -359,7 +502,7 @@ int main(int argc, char** argv) {
     while (!glfwWindowShouldClose(window)) {
         auto trTrans = glm::translate(glm::mat4(1.0F), glm::vec3(0.0F, 0.0F, -5.0F));
         auto trRotate = glm::rotate(glm::mat4(1.0F), t, glm::vec3(0.0F, 1.0F, 0.0F));        
-        auto trProj = glm::perspective(glm::radians(90.0F), 4.0F / 3.0F, 1.0F, 100.0F);
+        auto trProj = glm::perspective(glm::radians(90.0F), 4.0F / 3.0F, 0.1F, 100.0F);
         auto trModel = trTrans * trRotate;
         auto trView = userData.pCamera->getViewMatrix();
         auto trMv = trView * trModel;
@@ -368,23 +511,53 @@ int main(int argc, char** argv) {
         pCameraData->mvp = trProj * trMv;
         pCameraData->normal = glm::transpose(glm::inverse(trMv));
         pCameraData->world = trMv;
-        pCameraData->eye = glm::vec4(userData.pCamera->getPosition(), 1.0);
+        pCameraData->eye = glm::vec4(userData.pCamera->getPosition(), 1.0F);
+        pCameraData->numPointLights = 2;
+        pCameraData->numSpotLights = 1;
+
+        pMaterialData->specularIntensity = 0.0F;
+        pMaterialData->specularPower = 32.0F;
 
         pSunData->color = glm::vec4(1.0F);
         pSunData->direction = glm::vec4(1.0F, 0.0F, 0.0F, 1.0F);
         pSunData->ambientIntensity = userData.ambientIntensity;
-        pSunData->diffuseIntensity = 0.25F;
+        pSunData->diffuseIntensity = 0.1F;
         
-        pMaterialData->specularIntensity = 1.0F;
-        pMaterialData->specularPower = 32.0F;
-        
+        pPointLightsData->lights[0].ambientIntensity = 0.0F;
+        pPointLightsData->lights[0].diffuseIntensity = 0.2F;
+        pPointLightsData->lights[0].color = glm::vec4(1.0F, 0.5F, 0.0F, 1.0F);
+        pPointLightsData->lights[0].position = glm::vec4(3.0F, 1.0F, static_cast<float> (20.0F * std::sin(t)), 0.0F);
+        pPointLightsData->lights[0].attenuationConstant = 0.1F;
+        pPointLightsData->lights[0].attenuationLinear = 0.0F;
+        pPointLightsData->lights[0].attenuationExponential = 0.0F;
+
+        pPointLightsData->lights[1].ambientIntensity = 0.0F;
+        pPointLightsData->lights[1].diffuseIntensity = 0.3F;
+        pPointLightsData->lights[1].color = glm::vec4(0.0F, 0.5F, 1.0F, 1.0F);
+        pPointLightsData->lights[1].position = glm::vec4(7.0F, 1.0F, static_cast<float> (20.0F * std::cos(t)), 0.0F);
+        pPointLightsData->lights[1].attenuationConstant = 1.0F;
+        pPointLightsData->lights[1].attenuationLinear = 0.1F;
+        pPointLightsData->lights[1].attenuationExponential = 0.0F;
+
+        pSpotLightsData->lights[0].ambientIntensity = 0.0F;
+        pSpotLightsData->lights[0].diffuseIntensity = 0.9F;
+        pSpotLightsData->lights[0].color = glm::vec4(1.0F, 1.0F, 1.0F, 1.0F);
+        pSpotLightsData->lights[0].position = glm::vec4(userData.pCamera->getPosition(), 1.0F);
+        pSpotLightsData->lights[0].direction = glm::normalize(glm::vec4(userData.pCamera->getTarget(), 1.0F));
+        pSpotLightsData->lights[0].cutoff = static_cast<float> (glm::cos(glm::radians(45.0 + t)));
+        pSpotLightsData->lights[0].attenuationConstant = 1.0F;
+        pSpotLightsData->lights[0].attenuationLinear = 0.1F;
+        pSpotLightsData->lights[0].attenuationExponential = 0.0F;            
+
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
         glUseProgram(program);        
         glUniform1i(uImage, 0);
-        glBindBufferRange(GL_UNIFORM_BUFFER, 0, ubo, 0, alignedSizeofUBOCameraT);
-        glBindBufferRange(GL_UNIFORM_BUFFER, 1, ubo, alignedSizeofUBOCameraT, alignedSizeofUBOMaterialT);
-        glBindBufferRange(GL_UNIFORM_BUFFER, 2, ubo, alignedSizeofUBOCameraT + alignedSizeofUBOMaterialT, alignedSizeofUBOSunT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 0, ubo, alignedOffsetofUBOCamera, alignedSizeofUBOCameraT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 1, ubo, alignedOffsetofUBOMaterial, alignedSizeofUBOMaterialT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 2, ubo, alignedOffsetofUBOSun, alignedSizeofUBOSunT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 3, ubo, alignedOffsetofUBOPointLights, alignedSizeofUBOPointLightsT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 4, ubo, alignedOffsetofUBOSpotLights, alignedSizeofUBOSpotLightsT);
 
         pTexture->bind(0);        
 
