@@ -41,8 +41,6 @@ namespace gfx {
     }
 
     inline void Camera::init() noexcept {
-        auto hTarget = glm::normalize(glm::vec3(_target.x, 0.0F, _target.z));   
-
         _leftPressed = false;
         _rightPressed = false;
         _upPressed = false;

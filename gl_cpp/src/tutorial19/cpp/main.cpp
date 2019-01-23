@@ -23,6 +23,7 @@
 
 #include "camera.hpp"
 #include "texture.hpp"
+#include "util.hpp"
 
 namespace {
     void errorCallback(int error, const char * desc) {
@@ -38,24 +39,27 @@ namespace {
         "layout (location = 1) out vec3 vNormal;\n"
         "layout (location = 2) out vec3 vWorldPos;\n"
 
-        "layout (binding = 0, std140) uniform Data {\n"
+        "layout (binding = 0, std140) uniform CameraData {\n"
         "  mat4 mvp;\n"
         "  mat4 normal;\n"
         "  mat4 world;\n"
+        "  vec4 eye;\n"
+        "} uCamera;\n"
+
+        "layout (binding = 1, std140) uniform DirectionalLight {\n"        
         "  vec4 color;\n"
         "  vec4 direction;\n"
-        "  vec4 eye;\n"
         "  float ambientIntensity;\n"        
         "  float diffuseIntensity;\n"
         "  float specularIntensity;\n"
         "  float specularPower;\n"        
-        "} uData;\n"
+        "} uSun;\n"
 
         "void main() {\n"
-        "  gl_Position = uData.mvp * vec4(position, 1.0);\n"        
+        "  gl_Position = uCamera.mvp * vec4(position, 1.0);\n"        
         "  vTexCoord = texcoord;\n"
-        "  vNormal = mat3(uData.normal) * normal;\n"
-        "  vWorldPos = (uData.world * vec4(position, 1.0)).xyz;\n"
+        "  vNormal = mat3(uCamera.normal) * normal;\n"
+        "  vWorldPos = (uCamera.world * vec4(position, 1.0)).xyz;\n"
         "}";
 
     const std::string FRAGMENT_SHADER =
@@ -67,37 +71,40 @@ namespace {
 
         "uniform sampler2D uImage;\n"
 
-        "layout (binding = 0, std140) uniform Data {\n"
+        "layout (binding = 0, std140) uniform CameraData {\n"
         "  mat4 mvp;\n"
         "  mat4 normal;\n"
         "  mat4 world;\n"
+        "  vec4 eye;\n"
+        "} uCamera;\n"
+
+        "layout (binding = 1, std140) uniform DirectionalLight {\n"        
         "  vec4 color;\n"
         "  vec4 direction;\n"
-        "  vec4 eye;\n"
         "  float ambientIntensity;\n"        
         "  float diffuseIntensity;\n"
         "  float specularIntensity;\n"
         "  float specularPower;\n"        
-        "} uData;\n"
+        "} uSun;\n"
 
         "void main() {\n"
-        "  vec4 ambientColor = vec4(uData.color.rgb * uData.ambientIntensity, 1.0);\n"
-        "  vec3 lightDirection = -uData.direction.xyz;\n"
+        "  vec4 ambientColor = vec4(uSun.color.rgb * uSun.ambientIntensity, 1.0);\n"
+        "  vec3 lightDirection = -uSun.direction.xyz;\n"
         "  vec3 normal = normalize(vNormal);\n"    
         "  float diffuseFactor = dot(normal, lightDirection);\n"
         "  vec4 diffuseColor = vec4(0.0);\n"
         "  vec4 specularColor = vec4(0.0);\n"
 
         "  if (diffuseFactor > 0.0) {\n"
-        "    diffuseColor = vec4(uData.color.rgb * uData.diffuseIntensity * diffuseFactor, 1.0);\n"
+        "    diffuseColor = vec4(uSun.color.rgb * uSun.diffuseIntensity * diffuseFactor, 1.0);\n"
 
-        "    vec3 vertexToEye = normalize(uData.eye.xyz - vWorldPos);\n"
-        "    vec3 lightReflect = normalize(reflect(uData.direction.xyz, normal));\n"
+        "    vec3 vertexToEye = normalize(uCamera.eye.xyz - vWorldPos);\n"
+        "    vec3 lightReflect = normalize(reflect(uSun.direction.xyz, normal));\n"
         "    float specularFactor = dot(vertexToEye, lightReflect);\n"
 
         "    if (specularFactor > 0.0) {\n"
-        "      specularFactor = pow(specularFactor, uData.specularPower);\n"
-        "      specularColor = vec4(uData.color.rgb * uData.specularIntensity * specularFactor, 1.0);\n"
+        "      specularFactor = pow(specularFactor, uSun.specularPower);\n"
+        "      specularColor = vec4(uSun.color.rgb * uSun.specularIntensity * specularFactor, 1.0);\n"
         "    }\n"
         "  } else {\n"
         "    diffuseColor = vec4(0.0);\n"
@@ -277,25 +284,42 @@ int main(int argc, char** argv) {
     glCreateBuffers(1, &ibo);
     glNamedBufferData(ibo, sizeof(indices), indices.data(), GL_STATIC_DRAW);
 
-    struct UData {
+    struct UBOCameraT {
         glm::mat4 mvp;
         glm::mat4 normal;
         glm::mat4 world;
+        glm::vec4 eye;
+    }; 
+
+    struct UBOSunT {
         glm::vec4 color;
         glm::vec4 direction;
-        glm::vec4 eye;
         glm::float32 ambientIntensity;        
         glm::float32 diffuseIntensity;        
         glm::float32 specularIntensity;
         glm::float32 specularPower;
     };
 
+    GLint uboAlignment;
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &uboAlignment);
+
+    auto alignedSizeofUBOCameraT = gfx::util::alignUp(sizeof(UBOCameraT), uboAlignment);
+    auto alignedSizeofUBOSunT = gfx::util::alignUp(sizeof(UBOSunT), uboAlignment);
+    auto totalSizeofUBO = alignedSizeofUBOCameraT + alignedSizeofUBOSunT;
+
     GLuint ubo;
     glCreateBuffers(1, &ubo);
-    glNamedBufferStorage(ubo, sizeof(UData), nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+    glNamedBufferStorage(ubo, totalSizeofUBO, nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
 
-    auto pData = reinterpret_cast<UData * > (glMapNamedBufferRange(ubo, 0, sizeof(UData), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
+    UBOCameraT * pCameraData;
+    UBOSunT * pSunData;    
+    {
+        auto pBase = reinterpret_cast<GLchar * > (glMapNamedBufferRange(ubo, 0, totalSizeofUBO, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));        
 
+        pCameraData = reinterpret_cast<UBOCameraT *> (pBase);
+        pSunData = reinterpret_cast<UBOSunT * > (pBase + alignedSizeofUBOCameraT);
+    }
+    
     GLuint vao;
     glCreateVertexArrays(1, &vao);
     glEnableVertexArrayAttrib(vao, 0);
@@ -309,7 +333,6 @@ int main(int argc, char** argv) {
     glVertexArrayAttribBinding(vao, 2, 0);
     
     auto uImage = glGetUniformLocation(program, "uImage");
-    auto uData = glGetUniformBlockIndex(program, "Data");
 
     float t = 0.0F;    
 
@@ -354,22 +377,24 @@ int main(int argc, char** argv) {
         auto trMv = trView * trModel;
         auto trNormal = glm::transpose(glm::inverse(trMv));        
 
-        pData->mvp = trProj * trMv;
-        pData->normal = glm::transpose(glm::inverse(trMv));
-        pData->world = trMv;
-        pData->color = glm::vec4(1.0F);
-        pData->direction = glm::vec4(1.0F, 0.0F, 0.0F, 1.0F);
-        pData->ambientIntensity = userData.ambientIntensity;
-        pData->diffuseIntensity = 0.25F;
-        pData->specularIntensity = 1.0F;
-        pData->specularPower = 32.0F;
-        pData->eye = glm::vec4(userData.pCamera->getPosition(), 1.0);
+        pCameraData->mvp = trProj * trMv;
+        pCameraData->normal = glm::transpose(glm::inverse(trMv));
+        pCameraData->world = trMv;
+        pCameraData->eye = glm::vec4(userData.pCamera->getPosition(), 1.0);
+
+        pSunData->color = glm::vec4(1.0F);
+        pSunData->direction = glm::vec4(1.0F, 0.0F, 0.0F, 1.0F);
+        pSunData->ambientIntensity = userData.ambientIntensity;
+        pSunData->diffuseIntensity = 0.25F;
+        pSunData->specularIntensity = 1.0F;
+        pSunData->specularPower = 32.0F;
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
         glUseProgram(program);        
         glUniform1i(uImage, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, uData, ubo);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 0, ubo, 0, alignedSizeofUBOCameraT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 1, ubo, alignedSizeofUBOCameraT, alignedSizeofUBOSunT);
 
         pTexture->bind(0);        
 

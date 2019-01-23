@@ -23,6 +23,7 @@
 
 #include "camera.hpp"
 #include "texture.hpp"
+#include "util.hpp"
 
 namespace {
     void errorCallback(int error, const char * desc) {
@@ -37,19 +38,22 @@ namespace {
         "layout (location = 0) out vec2 vTexCoord;\n"
         "layout (location = 1) out vec3 vNormal;\n"
 
-        "layout (binding = 0, std140) uniform Data {\n"
+        "layout (binding = 0, std140) uniform CameraData {\n"
         "  mat4 mvp;\n"
         "  mat4 world;\n"
+        "} uCamera;\n"
+
+        "layout (binding = 1, std140) uniform SunData {\n"
         "  vec4 color;\n"
         "  vec4 direction;\n"
         "  float ambientIntensity;\n"
-        "  float diffuseIntensity;\n"        
-        "} uData;\n"
+        "  float diffuseIntensity;\n"
+        "} uSun;\n"
 
         "void main() {\n"
-        "  gl_Position = uData.mvp * vec4(position, 1.0);\n"        
+        "  gl_Position = uCamera.mvp * vec4(position, 1.0);\n"        
         "  vTexCoord = texcoord;\n"
-        "  vNormal = mat3(uData.world) * normal;\n"
+        "  vNormal = mat3(uCamera.world) * normal;\n"
         "}";
 
     const std::string FRAGMENT_SHADER =
@@ -60,21 +64,25 @@ namespace {
 
         "uniform sampler2D uImage;\n"
 
-        "layout (binding = 0, std140) uniform Data {\n"
+        "layout (binding = 0, std140) uniform CameraData {\n"
         "  mat4 mvp;\n"
         "  mat4 world;\n"
+        "} uCamera;\n"
+
+        "layout (binding = 1, std140) uniform SunData {\n"
         "  vec4 color;\n"
         "  vec4 direction;\n"
         "  float ambientIntensity;\n"
-        "  float diffuseIntensity;\n"        
-        "} uData;\n"
+        "  float diffuseIntensity;\n"
+        "} uSun;\n"
 
         "void main() {\n"
-        "  vec4 ambientColor = vec4(uData.color.rgb * uData.ambientIntensity, 1.0);\n"
-        "  float diffuseFactor = dot(normalize(vNormal), -uData.direction.xyz);\n"
+        "  vec4 ambientColor = vec4(uSun.color.rgb * uSun.ambientIntensity, 1.0);\n"
+        "  float diffuseFactor = dot(normalize(vNormal), -uSun.direction.xyz);\n"
         "  vec4 diffuseColor;\n"
+
         "  if (diffuseFactor > 0.0) {\n"
-        "    diffuseColor = vec4(uData.color.rgb * uData.diffuseIntensity * diffuseFactor, 1.0);\n"
+        "    diffuseColor = vec4(uSun.color.rgb * uSun.diffuseIntensity * diffuseFactor, 1.0);\n"
         "  } else {\n"
         "    diffuseColor = vec4(0.0);\n"
         "  }\n"
@@ -253,20 +261,37 @@ int main(int argc, char** argv) {
     glCreateBuffers(1, &ibo);
     glNamedBufferData(ibo, sizeof(indices), indices.data(), GL_STATIC_DRAW);
 
-    struct UData {
+    struct UBOCameraT {
         glm::mat4 mvp;
         glm::mat4 world;
+    };
+
+    struct UBOSunT {        
         glm::vec4 color;
         glm::vec4 direction;
         glm::float32 ambientIntensity;
         glm::float32 diffuseIntensity;
     };
 
+    GLint uboAlignment;
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &uboAlignment);
+
+    auto alignedSizeofUBOCameraT = gfx::util::alignUp(sizeof(UBOCameraT), uboAlignment);
+    auto alignedSizeofUBOSunT = gfx::util::alignUp(sizeof(UBOSunT), uboAlignment);
+    auto totalSizeofUBO = alignedSizeofUBOCameraT + alignedSizeofUBOSunT;
+
     GLuint ubo;
     glCreateBuffers(1, &ubo);
-    glNamedBufferStorage(ubo, sizeof(UData), nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+    glNamedBufferStorage(ubo, totalSizeofUBO, nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
 
-    auto pData = reinterpret_cast<UData * > (glMapNamedBufferRange(ubo, 0, sizeof(UData), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
+    UBOCameraT * pCameraData;
+    UBOSunT * pSunData;
+    {
+        auto pBaseData = reinterpret_cast<glm::u8 * > (glMapNamedBufferRange(ubo, 0, totalSizeofUBO, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
+
+        pCameraData = reinterpret_cast<UBOCameraT *> (pBaseData);
+        pSunData = reinterpret_cast<UBOSunT *> (pBaseData + alignedSizeofUBOCameraT);
+    }
 
     GLuint vao;
     glCreateVertexArrays(1, &vao);
@@ -281,7 +306,6 @@ int main(int argc, char** argv) {
     glVertexArrayAttribBinding(vao, 2, 0);
     
     auto uImage = glGetUniformLocation(program, "uImage");
-    auto uData = glGetUniformBlockIndex(program, "Data");
 
     float t = 0.0F;    
 
@@ -325,18 +349,19 @@ int main(int argc, char** argv) {
         auto trView = userData.pCamera->getViewMatrix();
         auto trMv = trView * trModel;
         
-        pData->mvp = trProj * trMv;
-        pData->world = glm::transpose(glm::inverse(trMv));
-        pData->color = glm::vec4(1.0F);
-        pData->direction = glm::vec4(1.0F, 0.0F, 0.0F, 1.0F);
-        pData->ambientIntensity = userData.ambientIntensity;
-        pData->diffuseIntensity = 0.75F;
+        pCameraData->mvp = trProj * trMv;
+        pCameraData->world = glm::transpose(glm::inverse(trMv));
+        pSunData->color = glm::vec4(1.0F);
+        pSunData->direction = glm::vec4(1.0F, 0.0F, 0.0F, 1.0F);
+        pSunData->ambientIntensity = userData.ambientIntensity;
+        pSunData->diffuseIntensity = 0.75F;
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
         glUseProgram(program);        
         glUniform1i(uImage, 0);
-        glBindBufferBase(GL_UNIFORM_BUFFER, uData, ubo);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 0, ubo, 0, alignedSizeofUBOCameraT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 1, ubo, alignedSizeofUBOCameraT, alignedSizeofUBOSunT);
 
         pTexture->bind(0);        
 
