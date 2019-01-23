@@ -213,6 +213,7 @@ int main(int argc, char** argv) {
     
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &vbo);
+    glDeleteBuffers(1, &ibo);
     glDeleteProgram(program);
 
     glfwDestroyWindow(window);

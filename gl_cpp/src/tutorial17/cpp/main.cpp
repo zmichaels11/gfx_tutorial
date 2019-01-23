@@ -22,6 +22,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "camera.hpp"
+#include "texture.hpp"
 
 namespace {
     void errorCallback(int error, const char * desc) {
@@ -31,22 +32,38 @@ namespace {
     const std::string VERTEX_SHADER = 
         "#version 450\n"        
         "layout (location = 0) in vec3 position;\n"
-        "layout (location = 0) out vec3 color;\n"
-        "uniform mat4 uMvp;\n"
+        "layout (location = 1) in vec2 texcoord;\n"        
+        "layout (location = 0) out vec2 vTexCoord;\n"
+
+        "layout (binding = 0) uniform Data {\n"
+        "  mat4 mvp;\n"
+        "  vec3 ambientColor;\n"
+        "  float ambientIntensity;\n"
+        "} uData;\n"
 
         "void main() {\n"
-        "  gl_Position = uMvp * vec4(position, 1.0);\n"
-        "  color = clamp(position, 0.0, 1.0);\n"
+        "  gl_Position = uData.mvp * vec4(position, 1.0);\n"        
+        "  vTexCoord = texcoord;\n"
         "}";
 
     const std::string FRAGMENT_SHADER =
         "#version 450\n"
-        "layout (location = 0) in vec3 vColor;\n"
+        "layout (location = 0) in vec2 vTexCoord;\n"
         "layout (location = 0) out vec4 fColor;\n"
 
+        "uniform sampler2D uImage;\n"
+
+        "layout (binding = 0) uniform Data {\n"
+        "  mat4 mvp;\n"
+        "  vec3 ambientColor;\n"
+        "  float ambientIntensity;\n"
+        "} uData;\n"
+
         "void main() {\n"
-        "  fColor.rgb = vColor;\n"
+        "  fColor.rgb = texture(uImage, vTexCoord).rgb;\n"
         "  fColor.a = 1.0;\n"
+        "  fColor.rgb *= uData.ambientColor;\n"
+        "  fColor *= uData.ambientIntensity;\n"
         "}";
 
     constexpr GLsizei MAX_INFO_LOG_LENGTH = 1024;
@@ -115,7 +132,7 @@ namespace {
         }
 
         std::cerr << message << std::endl;
-    }
+    }    
 }
 
 int main(int argc, char** argv) {
@@ -129,7 +146,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 
-    auto window = glfwCreateWindow(640, 480, "Tutorial13", nullptr, nullptr);
+    auto window = glfwCreateWindow(640, 480, "Tutorial16", nullptr, nullptr);
 
     if (nullptr == window) {
         throw std::runtime_error("Failed to create GLFW window!");
@@ -160,16 +177,20 @@ int main(int argc, char** argv) {
         program = linkProgram(shaders);
     }
 
-    auto points = std::array<glm::vec3, 4> ({
-        glm::vec3(-1.0F, -1.0F, 0.5773F),
-        glm::vec3(0.0F, -1.0F, -1.15475F),
-        glm::vec3(1.0F, -1.0F, 0.5773F),
-        glm::vec3(0.0F, 1.0F, 0.0F)
-    });
+    struct __attribute__ ((packed)) Vertex {
+        float x, y, z;
+        float u, v;        
+    };
+
+    auto points = std::vector<Vertex> ();
+    points.push_back({ -1.0F, -1.0F, 0.5773F, 0.0F, 0.0F });
+    points.push_back({ 0.0F, -1.0F, -1.15475F, 0.5F, 0.0F });
+    points.push_back({ 1.0F, -1.0F, 0.5773F, 1.0F, 0.0F });
+    points.push_back({ 0.0F, 1.0F, 0.0F, 0.5F, 1.0F });
 
     GLuint vbo;
     glCreateBuffers(1, &vbo);
-    glNamedBufferData(vbo, sizeof(points), points.data(), GL_STATIC_DRAW);
+    glNamedBufferData(vbo, points.size() * sizeof(Vertex), points.data(), GL_STATIC_DRAW);
 
     auto indices = std::array<glm::u16, 12> ({
         0, 3, 1,
@@ -182,48 +203,106 @@ int main(int argc, char** argv) {
     glCreateBuffers(1, &ibo);
     glNamedBufferData(ibo, sizeof(indices), indices.data(), GL_STATIC_DRAW);
 
+    struct __attribute__ ((packed)) UData {
+        float mvp[16];
+        float ambientColor[3];
+        float ambientIntensity;
+    };
+
+    GLuint ubo;
+    glCreateBuffers(1, &ubo);
+    glNamedBufferStorage(ubo, sizeof(UData), nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+
+    auto pData = reinterpret_cast<UData * > (glMapNamedBufferRange(ubo, 0, sizeof(UData), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
+
     GLuint vao;
     glCreateVertexArrays(1, &vao);
     glEnableVertexArrayAttrib(vao, 0);
     glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
     glVertexArrayAttribBinding(vao, 0, 0);
-
-    auto uMvp = glGetUniformLocation(program, "uMvp");
+    glEnableVertexArrayAttrib(vao, 1);
+    glVertexArrayAttribFormat(vao, 1, 2, GL_FLOAT, GL_FALSE, 3 * sizeof(float));
+    glVertexArrayAttribBinding(vao, 1, 0);
+    
+    auto uImage = glGetUniformLocation(program, "uImage");
+    auto uData = glGetUniformBlockIndex(program, "Data");
 
     float t = 0.0F;    
 
     glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+    glEnable(GL_DEPTH_TEST);
 
-    auto camera = gfx::Camera(640, 480);
+    struct UserDataT {
+        std::unique_ptr<gfx::Camera> pCamera;
+        float ambientIntensity;
+    } userData;
+
+    userData.pCamera = std::make_unique<gfx::Camera>(640, 480);
+    userData.ambientIntensity = 0.5F;
+
+    glfwSetWindowUserPointer(window, &userData);
+    glfwSetKeyCallback(window, [](auto pWindow, auto key, auto scancode, auto action, auto mods) {
+        auto pUserData = reinterpret_cast<UserDataT * > (glfwGetWindowUserPointer(pWindow));
+
+        pUserData->pCamera->onKeyboard(key, action);
+        
+        switch (key) {            
+            case GLFW_KEY_ESCAPE:
+                glfwSetWindowShouldClose(pWindow, GLFW_TRUE);
+                break;
+            case GLFW_KEY_A:
+                pUserData->ambientIntensity += 0.05F;
+                break;
+            case GLFW_KEY_S:
+                pUserData->ambientIntensity -= 0.05F;
+                break;
+        }
+    });
+
+    auto pTexture = std::make_unique<gfx::Texture> (GL_TEXTURE_2D, "data/test.png");
 
     while (!glfwWindowShouldClose(window)) {
         auto trTrans = glm::translate(glm::mat4(1.0F), glm::vec3(0.0F, 0.0F, -5.0F));
         auto trRotate = glm::rotate(glm::mat4(1.0F), t, glm::vec3(0.0F, 1.0F, 0.0F));        
         auto trProj = glm::perspective(glm::radians(90.0F), 4.0F / 3.0F, 1.0F, 100.0F);
         auto trModel = trTrans * trRotate;
-        auto trView = camera.getViewMatrix();
+        auto trView = userData.pCamera->getViewMatrix();
         
-        auto trMvp = trProj * trView * trModel;        
+        auto trMvp = trProj * trView * trModel;
+
+        std::memcpy(pData->mvp, glm::value_ptr(trMvp), 16 * sizeof(float));
+        pData->ambientColor[0] = 1.0F;
+        pData->ambientColor[1] = 1.0F;
+        pData->ambientColor[2] = 1.0F;
+        pData->ambientIntensity = userData.ambientIntensity;
         
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
-        glUseProgram(program);
-        glUniformMatrix4fv(uMvp, 1, GL_FALSE, glm::value_ptr(trMvp));
+        glUseProgram(program);        
+        glUniform1i(uImage, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, uData, ubo);
+
+        pTexture->bind(0);        
 
         glBindVertexArray(vao);
-        glBindVertexBuffer(0, vbo, 0, sizeof(glm::vec3));
+        glBindVertexBuffer(0, vbo, 0, sizeof(Vertex));
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
         glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_SHORT, 0);
 
         glfwSwapBuffers(window);        
         glfwPollEvents();
 
+        userData.pCamera->update(0.1F);
+
         t += 0.01F;
     }
+
+    pTexture = nullptr;
     
-    glDeleteVertexArrays(1, &vao);
+    glDeleteVertexArrays(1, &vao);    
     glDeleteBuffers(1, &vbo);
     glDeleteBuffers(1, &ibo);
+    glDeleteBuffers(1, &ubo);
     glDeleteProgram(program);
 
     glfwDestroyWindow(window);
