@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
 
     glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
 
-    auto camera = gfx::Camera(640, 480);
+    auto camera = gfx::Camera();
 
     glfwSetWindowUserPointer(window, &camera);
     glfwSetKeyCallback(window, [](auto pWindow, auto key, auto scancode, auto action, auto mods) {

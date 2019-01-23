@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
 
     glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
 
-    auto camera = gfx::Camera(640, 480);
+    auto camera = gfx::Camera();
 
     while (!glfwWindowShouldClose(window)) {
         auto trTrans = glm::translate(glm::mat4(1.0F), glm::vec3(0.0F, 0.0F, -5.0F));

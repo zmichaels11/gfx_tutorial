@@ -293,7 +293,7 @@ int main(int argc, char** argv) {
         float ambientIntensity;
     } userData;
 
-    userData.pCamera = std::make_unique<gfx::Camera>(640, 480);
+    userData.pCamera = std::make_unique<gfx::Camera>();
     userData.ambientIntensity = 0.1F;
 
     glfwSetWindowUserPointer(window, &userData);
