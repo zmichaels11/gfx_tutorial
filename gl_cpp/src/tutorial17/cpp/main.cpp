@@ -37,7 +37,7 @@ namespace {
 
         "layout (binding = 0) uniform Data {\n"
         "  mat4 mvp;\n"
-        "  vec3 ambientColor;\n"
+        "  vec4 color;\n"
         "  float ambientIntensity;\n"
         "} uData;\n"
 
@@ -55,14 +55,14 @@ namespace {
 
         "layout (binding = 0) uniform Data {\n"
         "  mat4 mvp;\n"
-        "  vec3 ambientColor;\n"
+        "  vec4 color;\n"
         "  float ambientIntensity;\n"
         "} uData;\n"
 
         "void main() {\n"
         "  fColor.rgb = texture(uImage, vTexCoord).rgb;\n"
         "  fColor.a = 1.0;\n"
-        "  fColor.rgb *= uData.ambientColor;\n"
+        "  fColor.rgb *= uData.color.rgb;\n"
         "  fColor *= uData.ambientIntensity;\n"
         "}";
 
@@ -203,9 +203,9 @@ int main(int argc, char** argv) {
     glCreateBuffers(1, &ibo);
     glNamedBufferData(ibo, sizeof(indices), indices.data(), GL_STATIC_DRAW);
 
-    struct __attribute__ ((packed)) UData {
-        float mvp[16];
-        float ambientColor[3];
+    struct UData {
+        glm::mat4 mvp;
+        glm::vec4 color;
         float ambientIntensity;
     };
 
@@ -268,12 +268,8 @@ int main(int argc, char** argv) {
         auto trModel = trTrans * trRotate;
         auto trView = userData.pCamera->getViewMatrix();
         
-        auto trMvp = trProj * trView * trModel;
-
-        std::memcpy(pData->mvp, glm::value_ptr(trMvp), 16 * sizeof(float));
-        pData->ambientColor[0] = 1.0F;
-        pData->ambientColor[1] = 1.0F;
-        pData->ambientColor[2] = 1.0F;
+        pData->mvp = trProj * trView * trModel;
+        pData->color = glm::vec4(1.0F);
         pData->ambientIntensity = userData.ambientIntensity;
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

@@ -40,9 +40,9 @@ namespace {
         "layout (binding = 0, std140) uniform Data {\n"
         "  mat4 mvp;\n"
         "  mat4 world;\n"
-        "  vec3 color;\n"
+        "  vec4 color;\n"
+        "  vec4 direction;\n"
         "  float ambientIntensity;\n"
-        "  vec3 direction;\n"
         "  float diffuseIntensity;\n"        
         "} uData;\n"
 
@@ -63,18 +63,18 @@ namespace {
         "layout (binding = 0, std140) uniform Data {\n"
         "  mat4 mvp;\n"
         "  mat4 world;\n"
-        "  vec3 color;\n"
+        "  vec4 color;\n"
+        "  vec4 direction;\n"
         "  float ambientIntensity;\n"
-        "  vec3 direction;\n"
         "  float diffuseIntensity;\n"        
         "} uData;\n"
 
         "void main() {\n"
-        "  vec4 ambientColor = vec4(uData.color * uData.ambientIntensity, 1.0);\n"
-        "  float diffuseFactor = dot(normalize(vNormal), -uData.direction);\n"
+        "  vec4 ambientColor = vec4(uData.color.rgb * uData.ambientIntensity, 1.0);\n"
+        "  float diffuseFactor = dot(normalize(vNormal), -uData.direction.xyz);\n"
         "  vec4 diffuseColor;\n"
         "  if (diffuseFactor > 0.0) {\n"
-        "    diffuseColor = vec4(uData.color * uData.diffuseIntensity * diffuseFactor, 1.0);\n"
+        "    diffuseColor = vec4(uData.color.rgb * uData.diffuseIntensity * diffuseFactor, 1.0);\n"
         "  } else {\n"
         "    diffuseColor = vec4(0.0);\n"
         "  }\n"
@@ -253,13 +253,13 @@ int main(int argc, char** argv) {
     glCreateBuffers(1, &ibo);
     glNamedBufferData(ibo, sizeof(indices), indices.data(), GL_STATIC_DRAW);
 
-    struct __attribute__ ((packed)) UData {
-        float mvp[16];
-        float world[16];
-        float color[3];
-        float ambientIntensity;
-        float direction[3];
-        float diffuseIntensity;
+    struct UData {
+        glm::mat4 mvp;
+        glm::mat4 world;
+        glm::vec4 color;
+        glm::vec4 direction;
+        glm::float32 ambientIntensity;
+        glm::float32 diffuseIntensity;
     };
 
     GLuint ubo;
@@ -324,21 +324,13 @@ int main(int argc, char** argv) {
         auto trModel = trTrans * trRotate;
         auto trView = userData.pCamera->getViewMatrix();
         auto trMv = trView * trModel;
-        auto trWorld = glm::transpose(glm::inverse(trMv));
         
-        auto trMvp = trProj * trMv;
-
-        std::memcpy(pData->mvp, glm::value_ptr(trMvp), 16 * sizeof(float));
-        std::memcpy(pData->world, glm::value_ptr(trWorld), 16 * sizeof(float));
-
-        pData->color[0] = 1.0F;
-        pData->color[1] = 1.0F;
-        pData->color[2] = 1.0F;
+        pData->mvp = trProj * trMv;
+        pData->world = glm::transpose(glm::inverse(trMv));
+        pData->color = glm::vec4(1.0F);
+        pData->direction = glm::vec4(1.0F, 0.0F, 0.0F, 1.0F);
         pData->ambientIntensity = userData.ambientIntensity;
         pData->diffuseIntensity = 0.75F;
-        pData->direction[0] = 1.0F;
-        pData->direction[1] = 0.0F;
-        pData->direction[2] = 0.0F;
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
