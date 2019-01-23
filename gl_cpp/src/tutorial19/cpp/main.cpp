@@ -223,17 +223,17 @@ int main(int argc, char** argv) {
         program = linkProgram(shaders);
     }
 
-    struct __attribute__ ((packed)) Vertex {
-        float x, y, z;
-        float u, v;
-        float nx, ny, nz;
+    struct Vertex {
+        glm::vec3 position;
+        glm::vec2 texcoord;
+        glm::vec3 normal;
     };
 
     auto points = std::vector<Vertex> ();
-    points.push_back({ -1.0F, -1.0F, 0.5773F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F });
-    points.push_back({ 0.0F, -1.0F, -1.15475F, 0.5F, 0.0F, 0.0F, 0.0F, 0.0F });
-    points.push_back({ 1.0F, -1.0F, 0.5773F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F });
-    points.push_back({ 0.0F, 1.0F, 0.0F, 0.5F, 1.0F, 0.0F, 0.0F, 0.0F });
+    points.push_back({ glm::vec3(-1.0F, -1.0F, 0.5773F), glm::vec2(0.0F, 0.0F), glm::vec3(0.0F) });
+    points.push_back({ glm::vec3(0.0F, -1.0F, -1.15475F), glm::vec2(0.5F, 0.0F), glm::vec3(0.0F) });
+    points.push_back({ glm::vec3(1.0F, -1.0F, 0.5773F), glm::vec2(1.0F, 0.0F), glm::vec3(0.0F) });
+    points.push_back({ glm::vec3(0.0F, 1.0F, 0.0F), glm::vec2(0.5F, 1.0F), glm::vec3(0.0F) });
 
     auto indices = std::array<glm::u16, 12> ({
             0, 3, 1,
@@ -251,29 +251,17 @@ int main(int argc, char** argv) {
         auto& p1 = points[idx1];
         auto& p2 = points[idx2];
 
-        auto v1 = glm::vec3(p1.x, p1.y, p1.z) - glm::vec3(p0.x, p0.y, p0.z);
-        auto v2 = glm::vec3(p2.x, p2.y, p2.z) - glm::vec3(p0.x, p0.y, p0.z);
+        auto v1 = p1.position - p0.position;
+        auto v2 = p2.position - p0.position;
         auto normal = glm::normalize(glm::cross(v1, v2));
         
-        p0.nx += normal.x;
-        p0.ny += normal.y;
-        p0.nz += normal.z;
-
-        p1.nx += normal.x;
-        p1.ny += normal.y;
-        p1.nz += normal.z;
-
-        p2.nx += normal.x;
-        p2.ny += normal.y;
-        p2.nz += normal.z;
+        p0.normal += normal;
+        p1.normal += normal;
+        p2.normal += normal;
     }
 
     for (auto& p : points) {
-        auto n = glm::normalize(glm::vec3(p.nx, p.ny, p.nz));
-
-        p.nx = n.x;
-        p.ny = n.y;
-        p.nz = n.z;
+        p.normal = glm::normalize(p.normal);
     }
 
     GLuint vbo;

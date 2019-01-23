@@ -165,16 +165,16 @@ int main(int argc, char** argv) {
         program = linkProgram(shaders);
     }
 
-    struct __attribute__ ((packed)) Vertex {
-        float x, y, z;
-        float u, v;        
+    struct Vertex {
+        glm::vec3 position;
+        glm::vec2 texcoord;
     };
 
     auto points = std::vector<Vertex> ();
-    points.push_back({ -1.0F, -1.0F, 0.5773F, 0.0F, 0.0F });
-    points.push_back({ 0.0F, -1.0F, -1.15475F, 0.5F, 0.0F });
-    points.push_back({ 1.0F, -1.0F, 0.5773F, 1.0F, 0.0F });
-    points.push_back({ 0.0F, 1.0F, 0.0F, 0.5F, 1.0F });
+    points.push_back({ glm::vec3(-1.0F, -1.0F, 0.5773F), glm::vec2(0.0F, 0.0F) });
+    points.push_back({ glm::vec3(0.0F, -1.0F, -1.15475F), glm::vec2(0.5F, 0.0F) });
+    points.push_back({ glm::vec3(1.0F, -1.0F, 0.5773F), glm::vec2(1.0F, 0.0F) });
+    points.push_back({ glm::vec3(0.0F, 1.0F, 0.0F), glm::vec2(0.5F, 1.0F) });
 
     GLuint vbo;
     glCreateBuffers(1, &vbo);
