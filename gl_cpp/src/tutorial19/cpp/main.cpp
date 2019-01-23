@@ -46,13 +46,16 @@ namespace {
         "  vec4 eye;\n"
         "} uCamera;\n"
 
-        "layout (binding = 1, std140) uniform DirectionalLight {\n"        
+        "layout (binding = 1, std140) uniform MaterialData {\n"
+        "  float specularIntensity;\n"
+        "  float specularPower;\n"
+        "} uMaterial;\n"
+
+        "layout (binding = 2, std140) uniform DirectionalLight {\n"        
         "  vec4 color;\n"
         "  vec4 direction;\n"
         "  float ambientIntensity;\n"        
-        "  float diffuseIntensity;\n"
-        "  float specularIntensity;\n"
-        "  float specularPower;\n"        
+        "  float diffuseIntensity;\n"     
         "} uSun;\n"
 
         "void main() {\n"
@@ -78,13 +81,16 @@ namespace {
         "  vec4 eye;\n"
         "} uCamera;\n"
 
-        "layout (binding = 1, std140) uniform DirectionalLight {\n"        
+        "layout (binding = 1, std140) uniform MaterialData {\n"
+        "  float specularIntensity;\n"
+        "  float specularPower;\n"
+        "} uMaterial;\n"
+
+        "layout (binding = 2, std140) uniform DirectionalLight {\n"        
         "  vec4 color;\n"
         "  vec4 direction;\n"
         "  float ambientIntensity;\n"        
-        "  float diffuseIntensity;\n"
-        "  float specularIntensity;\n"
-        "  float specularPower;\n"        
+        "  float diffuseIntensity;\n"     
         "} uSun;\n"
 
         "void main() {\n"
@@ -103,8 +109,8 @@ namespace {
         "    float specularFactor = dot(vertexToEye, lightReflect);\n"
 
         "    if (specularFactor > 0.0) {\n"
-        "      specularFactor = pow(specularFactor, uSun.specularPower);\n"
-        "      specularColor = vec4(uSun.color.rgb * uSun.specularIntensity * specularFactor, 1.0);\n"
+        "      specularFactor = pow(specularFactor, uMaterial.specularPower);\n"
+        "      specularColor = vec4(uSun.color.rgb * uMaterial.specularIntensity * specularFactor, 1.0);\n"
         "    }\n"
         "  } else {\n"
         "    diffuseColor = vec4(0.0);\n"
@@ -279,33 +285,39 @@ int main(int argc, char** argv) {
         glm::vec4 eye;
     }; 
 
+    struct UBOMaterialT {
+        glm::float32 specularIntensity;
+        glm::float32 specularPower;
+    };
+
     struct UBOSunT {
         glm::vec4 color;
         glm::vec4 direction;
         glm::float32 ambientIntensity;        
         glm::float32 diffuseIntensity;        
-        glm::float32 specularIntensity;
-        glm::float32 specularPower;
     };
 
     GLint uboAlignment;
     glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &uboAlignment);
 
     auto alignedSizeofUBOCameraT = gfx::util::alignUp(sizeof(UBOCameraT), uboAlignment);
+    auto alignedSizeofUBOMaterialT = gfx::util::alignUp(sizeof(UBOMaterialT), uboAlignment);
     auto alignedSizeofUBOSunT = gfx::util::alignUp(sizeof(UBOSunT), uboAlignment);
-    auto totalSizeofUBO = alignedSizeofUBOCameraT + alignedSizeofUBOSunT;
+    auto totalSizeofUBO = alignedSizeofUBOCameraT + alignedSizeofUBOSunT + alignedSizeofUBOMaterialT;
 
     GLuint ubo;
     glCreateBuffers(1, &ubo);
     glNamedBufferStorage(ubo, totalSizeofUBO, nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
 
     UBOCameraT * pCameraData;
-    UBOSunT * pSunData;    
+    UBOMaterialT * pMaterialData;
+    UBOSunT * pSunData;
     {
         auto pBase = reinterpret_cast<GLchar * > (glMapNamedBufferRange(ubo, 0, totalSizeofUBO, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));        
 
         pCameraData = reinterpret_cast<UBOCameraT *> (pBase);
-        pSunData = reinterpret_cast<UBOSunT * > (pBase + alignedSizeofUBOCameraT);
+        pMaterialData = reinterpret_cast<UBOMaterialT *> (pBase + alignedSizeofUBOCameraT);
+        pSunData = reinterpret_cast<UBOSunT *> (pBase + alignedSizeofUBOCameraT + alignedSizeofUBOMaterialT);
     }
     
     GLuint vao;
@@ -374,15 +386,17 @@ int main(int argc, char** argv) {
         pSunData->direction = glm::vec4(1.0F, 0.0F, 0.0F, 1.0F);
         pSunData->ambientIntensity = userData.ambientIntensity;
         pSunData->diffuseIntensity = 0.25F;
-        pSunData->specularIntensity = 1.0F;
-        pSunData->specularPower = 32.0F;
+        
+        pMaterialData->specularIntensity = 1.0F;
+        pMaterialData->specularPower = 32.0F;
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
         glUseProgram(program);        
         glUniform1i(uImage, 0);
         glBindBufferRange(GL_UNIFORM_BUFFER, 0, ubo, 0, alignedSizeofUBOCameraT);
-        glBindBufferRange(GL_UNIFORM_BUFFER, 1, ubo, alignedSizeofUBOCameraT, alignedSizeofUBOSunT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 1, ubo, alignedSizeofUBOCameraT, alignedSizeofUBOMaterialT);
+        glBindBufferRange(GL_UNIFORM_BUFFER, 2, ubo, alignedSizeofUBOCameraT + alignedSizeofUBOMaterialT, alignedSizeofUBOSunT);
 
         pTexture->bind(0);        
 
