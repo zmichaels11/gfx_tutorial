@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 
-    auto window = glfwCreateWindow(640, 480, "Tutorial16", nullptr, nullptr);
+    auto window = glfwCreateWindow(640, 480, "Tutorial17", nullptr, nullptr);
 
     if (nullptr == window) {
         throw std::runtime_error("Failed to create GLFW window!");
