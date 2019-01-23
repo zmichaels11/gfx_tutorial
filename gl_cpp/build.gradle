@@ -239,5 +239,21 @@ model {
                 }
             }
         }
+
+        tutorial18 (NativeExecutableSpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/tutorial18/cpp'
+                        include '**/*.cpp'
+                    }
+
+                    exportedHeaders {
+                        srcDir 'src/tutorial18/include'
+                        include '**/*.hpp'
+                    }
+                }
+            }
+        }
     }
 }
